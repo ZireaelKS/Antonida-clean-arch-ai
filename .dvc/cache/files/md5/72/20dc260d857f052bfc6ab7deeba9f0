@@ -1,0 +1,6 @@
+text,author,sentiment
+"This movie is absolutely fantastic!",user1,positive
+"Terrible experience, waste of money",user2,negative
+"Good film, worth watching",user3,positive
+"The acting was brilliant",user4,positive
+"Not worth the ticket price",user5,negative

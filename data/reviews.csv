@@ -1,0 +1,10 @@
+text,author,sentiment
+"This movie is absolutely fantastic!",user1,positive
+"Terrible experience, waste of money",user2,negative
+"Good film, worth watching",user3,positive
+"The acting was brilliant",user4,positive
+"Not worth the ticket price",user5,negative
+"Amazing cinematography and direction",user6,positive
+"Boring and predictable plot",user7,negative
+"Would recommend to everyone",user8,positive
+"Waste of time and money",user9,negative
