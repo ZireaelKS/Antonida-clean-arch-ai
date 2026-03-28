@@ -52,10 +52,16 @@ poetry install
 ## Запуск проекта
 #### Запуск через CLI
 **С аргументом командной строки**
+```
 poetry run python -m src.presentation.cli "This movie is fantastic!"
+```
 
 **С текстом по умолчанию**
+```
 poetry run python -m src.presentation.cli
+```
 
 ## Запуск тестов
+```
 poetry run pytest
+```
