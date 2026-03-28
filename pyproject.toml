@@ -1,15 +1,17 @@
-[project]
+[tool.poetry]
 name = "clean-arch-ai"
 version = "0.1.0"
-description = ""
-authors = [
-    {name = "ZireaelKS",email = "Iliveyou2610@gmail.com"}
-]
+description = "AI System Skeleton based on Clean Architecture"
+authors = ["ZireaelKS Iliveyou2610@gmail.com"]
 readme = "README.md"
-requires-python = ">=3.14"
-dependencies = [
-]
+packages = [{include = "src"}]
 
+[tool.poetry.dependencies]
+python = "^3.11"
+pydantic = "^2.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
