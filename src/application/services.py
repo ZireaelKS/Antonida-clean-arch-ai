@@ -5,8 +5,12 @@
 Presentation слоя, валидируют их через Domain сущности и передают
 в Infrastructure через абстрактные интерфейсы.
 """
+from pathlib import Path
 from src.domain.interfaces import ISentimentAnalyzer
 from src.domain.entities import Review, SentimentScore
+from src.infrastructure.csv_reader import CSVReviewReader
+from src.domain.interfaces import IDataStorage
+
 class ReviewProcessingService:
     """
     Сервис (Use Case) для выполнения предсказаний.
@@ -70,3 +74,79 @@ class ReviewProcessingService:
         Алиас для process_review (для обратной совместимости).
         """
         return self.process_review(raw_content)
+
+    def load_reviews_from_csv(self, csv_path: str) -> list[Review]:
+        """
+        Загружает отзывы из CSV файла.
+
+        Args:
+            csv_path: Путь к CSV файлу
+
+        Returns:
+            List[Review]: Список отзывов
+        """
+        reader = CSVReviewReader(csv_path)
+        return reader.read_all()
+
+    def analyze_batch(self, csv_path: str) -> list[SentimentScore]:
+        """
+        Анализирует все отзывы из CSV файла.
+
+        Args:
+            csv_path: Путь к CSV файлу
+
+        Returns:
+            List[SentimentScore]: Список результатов анализа
+        """
+        reviews = self.load_reviews_from_csv(csv_path)
+        results = []
+
+        for review in reviews:
+            result = self.process_review(review.text)
+            results.append(result)
+
+        return results
+
+
+class DataSyncService:
+    """
+    Сервис (Use Case) для синхронизации локальных данных с облаком.
+
+    Этот компонент отвечает за то, чтобы перед началом работы модели
+    необходимые данные (веса, датасеты) гарантированно находились на диске.
+    Он использует абстракцию IDataStorage, поэтому не знает, откуда именно
+    качаются данные (S3, FTP, Google Drive).
+    """
+
+    def __init__(self, storage: IDataStorage):
+        """
+        Инициализация сервиса.
+
+        Args:
+            storage (IDataStorage): Объект, реализующий интерфейс хранилища.
+                                    Сюда передается конкретная реализация (например, S3Storage),
+                                    но сервис работает с ней только через методы интерфейса.
+        """
+        # Инверсия зависимостей: зависим от интерфейса, а не от реализации
+        self.storage = storage
+
+    def sync_dataset(self, remote_path: str, local_path: str) -> None:
+        """
+        Проверяет наличие локального файла и скачивает его при отсутствии.
+
+        Это обеспечивает идемпотентность: повторный запуск не приведет к
+        лишним скачиваниям, если данные уже на месте.
+        """
+        local_file = Path(local_path)
+
+        if not local_file.exists():
+            print(f"[Sync] Файл {local_path} не найден. Запрашиваю синхронизацию--.")
+
+            # Создаем родительские папки, если их нет (например, data/docs/)
+            # exist_ok=True позволяет не падать с ошибкой, если папка уже есть
+            local_file.parent.mkdir(parents=True, exist_ok=True)
+
+            # Скачиваем данные через абстрактное хранилище
+            self.storage.download_file(remote_path, local_path)
+        else:
+            print(f"[Sync] Файл {local_path} уже существует. Пропускаю.")

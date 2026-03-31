@@ -30,6 +30,12 @@ cli.py: Интерфейс командной строки
 #### Предварительные требования
 Python 3.10+
 Poetry (управление зависимостями)
+Pydantic: Описание и валидация сущностей (Entities).
+FastAPI: Веб-интерфейс API.
+Docker: Запуск инфраструктуры (MinIO).
+DVC (Data Version Control): Управление версиями данных.
+Boto3: Работа с S3-хранилищем (MinIO).
+Pytest: Модульное тестирование.
 
 #### Инициализация git-репозитория
 ```
@@ -48,6 +54,56 @@ poetry lock
 poetry install
 ```
 
+#### Запуск MinIO через Docker Compose
+```
+docker-compose up -d
+```
+
+#### Создайте бакет (Bucket):
+- Откройте браузер и перейдите по адресу: http://localhost:9001.
+- Войдите в систему, используя логин и пароль
+- В меню слева выберите Buckets → Create Bucket.
+- Введите имя бакета: datasets и нажмите Create Bucket.
+
+#### Настройка DVC (Data Version Control)
+##### 1. Инициализация DVC
+```
+poetry run dvc init
+```
+
+##### 2. Добавление данных под контроль DVC
+```
+mkdir -p data/reviews
+poetry run dvc add data/reviews
+```
+
+##### 3. Настройка удаленного хранилища (MinIO)
+```
+## Добавление удаленного хранилища
+poetry run dvc remote add -d minio s3://datasets
+
+## Настройка URL локального MinIO
+poetry run dvc remote modify minio endpointurl http://localhost:9001
+
+## Настройка учетных данных
+poetry run dvc remote modify minio access_key_id *****
+poetry run dvc remote modify minio secret_access_key *****
+```
+
+##### 4. Отправка данных в MinIO
+```
+poetry run dvc push
+```
+
+##### Установка uvicorn
+```
+poetry add uvicorn
+```
+
+##### Установка FastAPI
+```
+poetry add fastapi
+```
 
 ## Запуск проекта
 #### Запуск через CLI
@@ -61,7 +117,49 @@ poetry run python -m src.presentation.cli "This movie is fantastic!"
 poetry run python -m src.presentation.cli
 ```
 
+**Проверить синхронизацию данных**
+```
+# Синхронизировать данные из MinIO
+poetry run python -m src.presentation.cli --sync
+```
+
+**Протестировать анализ CSV файла**
+```
+# Анализ всех отзывов из CSV
+poetry run python -m src.presentation.cli --csv data/reviews.csv
+```
+
+**Проверить DVC статус**
+```
+# Проверить статус данных
+poetry run dvc status
+```
+
+**Запуск скрипта который автоматически подготовит MinIO для работы приложения**
+```
+poetry run python scripts/init_minio.py
+```
+
+**Запуск сервера API**
+```
+poetry run uvicorn src.presentation.api:app --reload
+```
+
+
 ## Запуск тестов
 ```
 poetry run pytest
+```
+
+## Конфигурация
+```
+Параметры подключения к хранилищу можно переопределить через переменные окружения:
+MINIO_ENDPOINT
+ (default: http://localhost:9000)
+MINIO_ACCESS_KEY
+ (default: minioadmin)
+MINIO_SECRET_KEY
+ (default: minioadmin)
+MINIO_BUCKET
+ (default: datasets
 ```
