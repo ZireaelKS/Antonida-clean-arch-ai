@@ -1,0 +1,25 @@
+version: '3.8'
+services:
+  # Сервис объектного хранилища (S3-compatible)
+  minio:
+    image: minio/minio:latest
+    container_name: ai-arch-minio
+    ports:
+      - "9000:9000" # API порт (используется boto3, DVC и другими клиентами)
+      - "9001:9001" # Console порт (веб-интерфейс для управления через браузер)
+    environment:
+      # Учетные данные администратора (в продакшене лучше использовать .env файл)
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    # Команда запуска: указываем папку для данных (/data) и адрес консоли
+    command: server /data --console-address ":9001"
+    volumes:
+      # Монтирование тома для сохранения данных при перезапуске контейнера
+      - minio_storage:/data
+
+volumes:
+  # Объявление именованного тома для хранения данных MinIO
+  minio_storage:
+
+
+
