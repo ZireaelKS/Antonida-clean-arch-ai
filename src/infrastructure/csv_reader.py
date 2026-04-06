@@ -6,9 +6,10 @@ import csv
 from typing import List
 from pathlib import Path
 from src.domain.entities import Review
+from src.domain.interfaces import IReviewReader
 
 
-class CSVReviewReader:
+class CSVReviewReader(IReviewReader):
     """
     Читатель CSV файлов с отзывами.
     Преобразует данные из CSV в список доменных сущностей Review.

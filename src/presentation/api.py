@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from src.infrastructure.models import SimpleAnalyzer
 from src.infrastructure.storage import S3Storage
+from src.infrastructure.csv_reader import CSVReviewReader
 from src.application.services import ReviewProcessingService, DataSyncService
 from src.domain.entities import SentimentScore
 
@@ -71,6 +72,12 @@ class ReviewRequest(BaseModel):
     text: str
     author: str = "Antonida"
 
+csv_reader = CSVReviewReader("data/reviews.csv")  # Путь к CSV файлу
+analyzer = SimpleAnalyzer()
+review_service = ReviewProcessingService(
+    analyzer=analyzer,
+    reader=csv_reader
+)
 
 @app.get("/")
 def root():
@@ -95,20 +102,19 @@ def classify_document(request: ReviewRequest):
     Эндпоинт для классификации документа.
     Принимает JSON с текстом документа, возвращает категорию и уверенность.
     """
-    # 1. Composition Root (Сборка зависимостей)
-    # В рамках Clean Architecture слой Presentation отвечает за сборку графа объектов.
-    # создаем конкретную реализацию модели (SimpleAnalyzer) и передаем её в сервис.
-    # В более сложных приложениях для этого используется Dependency Injection контейнер (FastAPI Depends).
-    classifier = SimpleAnalyzer()
-    service = ReviewProcessingService(analyzer=analyzer)
-
-    # 2. Вызов бизнес-логики (Application Layer)
+    # Вызов бизнес-логики
     # передаем данные из DTO (request) в метод сервиса.
-    result = service.run(
-        filename = request.filename,
-        raw_content = request.content
-    )
+    result = review_service.process_review(request.text)
 
-    # 3. Возврат результата
+    # Возврат результата
     # FastAPI автоматически сериализует объект SentimentScore (Pydantic модель) в JSON.
     return result
+
+# Эндпоинт для пакетной обработки
+@app.post("/analyze-batch", response_model=list[SentimentScore])
+def analyze_batch():
+    """
+    Эндпоинт для анализа всех отзывов из CSV файла.
+    """
+    results = review_service.analyze_batch()
+    return results

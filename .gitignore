@@ -1,2 +1,20 @@
-"data/docs/" 
-"data/reviews.csv" 
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+venv/
+.venv/
+poetry.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# DVC cache and temp files
+.dvc/cache/
+.dvc/tmp/
+.dvc/state*
+.dvc/updater

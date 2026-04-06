@@ -11,9 +11,59 @@
 import sys
 import os
 import argparse
+import subprocess
+from pathlib import Path
 from src.infrastructure.models import SimpleAnalyzer
 from src.infrastructure.storage import S3Storage
+from src.infrastructure.csv_reader import CSVReviewReader
 from src.application.services import ReviewProcessingService, DataSyncService
+
+
+def ensure_data_synced(local_path: str, remote_path: str = None, sync_service: DataSyncService = None) -> bool:
+    """
+    Проверяет наличие файла локально и синхронизирует через DVC при необходимости.
+    """
+    local_file = Path(local_path)
+
+    # Если файл уже существует - ничего не делаем
+    if local_file.exists():
+        print(f"[Sync] Файл {local_path} уже существует локально.")
+        return True
+
+    print(f"[Sync] Файл {local_path} не найден. Загружаю из MinIO через DVC...")
+
+    # Находим соответствующий .dvc файл
+    dvc_file = local_file.with_suffix(local_file.suffix + '.dvc')
+    if not dvc_file.exists():
+        # Ищем в родительских папках
+        dvc_file = Path(local_path + '.dvc')
+
+    if not dvc_file.exists():
+        print(f"[Sync Error] DVC метафайл {dvc_file} не найден.")
+        return False
+
+    # Используем dvc pull для восстановления файла
+    try:
+        result = subprocess.run(
+            ["poetry", "run", "dvc", "pull", str(dvc_file)],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        print(f"[Sync] Данные успешно загружены из MinIO")
+
+        # Проверяем, что файл появился
+        if local_file.exists():
+            return True
+        else:
+            print(f"[Sync Error] Файл не появился после dvc pull")
+            return False
+
+    except subprocess.CalledProcessError as e:
+        print(f"[Sync Error] DVC pull failed: {e.stderr}")
+        return False
+
+
 def main():
     """
     Точка входа в приложение.
@@ -50,7 +100,7 @@ def main():
 
     # 2.2 Сервис маршрутизации документов
     # Сервис получает готовую модель, не зная, как она устроена внутри.
-    service = ReviewProcessingService(analyzer=analyzer)
+    service = ReviewProcessingService(analyzer=analyzer, reader=None)
 
     # --- 3. Подготовка данных (Синхронизация) --
     # Скачиваем файл, необходимый для демонстрации (если его нет локально)
@@ -68,22 +118,40 @@ def main():
 
     # --- 4. Запуск ---
     if args.csv:
-        # Анализ всех отзывов из CSV
-        print(f"Анализ отзывов из файла: {args.csv}")
+        csv_path = args.csv
 
-        # Получаем результаты и сами отзывы
-        from src.infrastructure.csv_reader import CSVReviewReader
-        reader = CSVReviewReader(args.csv)
+        print(f"\n[Batch Mode] Подготовка к анализу файла: {csv_path}")
+
+        # Определяем remote_path на основе локального пути
+        # Если путь содержит 'data/reviews.csv', используем 'reviews.csv'
+        if "reviews.csv" in csv_path:
+            remote_file = "reviews.csv"
+        else:
+            remote_file = Path(csv_path).name
+
+        # Автоматически синхронизируем файл, если его нет
+        if not ensure_data_synced(csv_path, remote_file, sync_service):
+            print("[Error] Не удалось получить файл для анализа. Выход.")
+            sys.exit(1)
+
+        reader = CSVReviewReader(csv_path)
         reviews = reader.read_all()
+        service_with_reader = ReviewProcessingService(analyzer=analyzer, reader=reader)
 
-        print(f"\nРезультаты анализа ({len(reviews)} отзывов):")
+        # Выполняем анализ
+        print(f"\nАнализ отзывов из файла: {csv_path}")
+        results = service_with_reader.analyze_batch()
+
+        print(f"\nРезультаты анализа ({len(results)} отзывов):")
         print("=" * 60)
 
-        for i, review in enumerate(reviews, 1):
-            result = service.process_review(review.text)
-
-            print(f"\n{i}. Отзыв: \"{review.text}\"")
+        for i, (review, result) in enumerate(zip(reviews, results), 1):
+            print(f"\n{i}. Отзыв: \"{review.text[:100]}{'...' if len(review.text) > 100 else ''}\"")
             print(f"  Результат: {result.label} (уверенность: {result.score:.1%})")
+
+        print(f"\n Всего обработано: {len(results)} отзывов")
+        return
+
     elif args.text:
         # Анализ одного отзыва
         input_text = args.text

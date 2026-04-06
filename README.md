@@ -83,12 +83,18 @@ poetry run dvc add data/reviews
 poetry run dvc remote add -d minio s3://datasets
 
 ## Настройка URL локального MinIO
-poetry run dvc remote modify minio endpointurl http://localhost:9001
+poetry run dvc remote modify minio endpointurl http://localhost:9000
 
 ## Настройка учетных данных
 poetry run dvc remote modify minio access_key_id *****
 poetry run dvc remote modify minio secret_access_key *****
 ```
+
+**Важно:** Порты MinIO
+- **9000** - API endpoint (для DVC, boto3, AWS CLI)
+- **9001** - Web Console (браузерный интерфейс)
+
+DVC работает через API, поэтому используем порт **9000**.
 
 ##### 4. Отправка данных в MinIO
 ```
@@ -145,6 +151,9 @@ poetry run python scripts/init_minio.py
 poetry run uvicorn src.presentation.api:app --reload
 ```
 
+**Открыть документацию FastAPI**
+
+В браузере откройте: http://localhost:8000/docs
 
 ## Запуск тестов
 ```

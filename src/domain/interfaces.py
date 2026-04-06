@@ -36,3 +36,18 @@ class IDataStorage(ABC):
     def upload_file(self, local_path: str, remote_path: str) -> None:
         """Загрузить локальный файл в облако."""
         pass
+
+
+class IReviewReader(ABC):
+    """
+    Абстрактный интерфейс для чтения отзывов из различных источников данных.
+    Определяет контракт для классов, которые читают отзывы (CSV, JSON, БД и т.д.)
+    """
+    @abstractmethod
+    def read_all(self) -> list[Review]:
+        """
+        Читает все отзывы из источника данных.
+        Returns:
+            List[Review]: Список сущностей Review
+        """
+        pass
