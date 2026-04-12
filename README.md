@@ -54,6 +54,12 @@ poetry lock
 poetry install
 ```
 
+#### Установка зависимостей DVC
+```
+poetry add dvc
+poetry add dvc-s3
+```
+
 #### Запуск MinIO через Docker Compose
 ```
 docker-compose up -d
@@ -71,7 +77,27 @@ docker-compose up -d
 poetry run dvc init
 ```
 
-##### 2. Настройка удаленного хранилища (MinIO)
+##### 2. Добавление данных под контроль DVC
+```
+## Добавление целой папки
+poetry run dvc add data/docs
+
+## Добавление одного файла
+poetry run dvc add data/reviews.csv
+```
+Добавляйте папки с осторожностью:
+- Если папка большая (гигабайты), dvc add может работать долго
+- При изменении любого файла в папке, DVC будет считать всю папку изменённой
+- Нельзя выборочно восстановить один файл - только всю папку целиком
+
+
+##### 3. Фиксация изменений в Git
+```
+git add data/docs.dvc .gitignore 
+git commit -m "Add initial dataset structure
+```
+
+##### 4. Настройка удаленного хранилища (MinIO)
 ```
 ## Добавление удаленного хранилища
 poetry run dvc remote add -d minio s3://datasets
@@ -91,24 +117,21 @@ poetry run dvc remote modify minio secret_access_key minioadmin
 DVC работает через API, поэтому используем порт **9000**.
 
 
-##### 3. Добавление данных под контроль DVC
-```
-## Добавление целой папки
-poetry run dvc add data/docs
-
-## Добавление одного файла
-poetry run dvc add data/reviews.csv
-```
-Добавляйте папки с осторожностью:
-- Если папка большая (гигабайты), dvc add может работать долго
-- При изменении любого файла в папке, DVC будет считать всю папку изменённой
-- Нельзя выборочно восстановить один файл - только всю папку целиком
-
-
-##### 4. Отправка данных в MinIO
+##### 5. Отправка данных в MinIO
 ```
 poetry run dvc push
 ```
+
+##### 6. Проверить, что данные синхронизированы
+```
+poetry run dvc status --cloud
+## Должно быть: Cache and remote 'minio' are in sync.
+
+## Проверить локальный статус
+poetry run dvc status
+## Ожидаемый вывод: Data and pipelines are up to date.
+```
+
 
 ##### Установка uvicorn
 ```
