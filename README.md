@@ -71,13 +71,7 @@ docker-compose up -d
 poetry run dvc init
 ```
 
-##### 2. Добавление данных под контроль DVC
-```
-mkdir -p data/reviews
-poetry run dvc add data/reviews
-```
-
-##### 3. Настройка удаленного хранилища (MinIO)
+##### 2. Настройка удаленного хранилища (MinIO)
 ```
 ## Добавление удаленного хранилища
 poetry run dvc remote add -d minio s3://datasets
@@ -86,8 +80,8 @@ poetry run dvc remote add -d minio s3://datasets
 poetry run dvc remote modify minio endpointurl http://localhost:9000
 
 ## Настройка учетных данных
-poetry run dvc remote modify minio access_key_id *****
-poetry run dvc remote modify minio secret_access_key *****
+poetry run dvc remote modify minio access_key_id minioadmin
+poetry run dvc remote modify minio secret_access_key minioadmin
 ```
 
 **Важно:** Порты MinIO
@@ -95,6 +89,21 @@ poetry run dvc remote modify minio secret_access_key *****
 - **9001** - Web Console (браузерный интерфейс)
 
 DVC работает через API, поэтому используем порт **9000**.
+
+
+##### 3. Добавление данных под контроль DVC
+```
+## Добавление целой папки
+poetry run dvc add data/docs
+
+## Добавление одного файла
+poetry run dvc add data/reviews.csv
+```
+Добавляйте папки с осторожностью:
+- Если папка большая (гигабайты), dvc add может работать долго
+- При изменении любого файла в папке, DVC будет считать всю папку изменённой
+- Нельзя выборочно восстановить один файл - только всю папку целиком
+
 
 ##### 4. Отправка данных в MinIO
 ```
@@ -125,7 +134,7 @@ poetry run python -m src.presentation.cli
 
 **Проверить синхронизацию данных**
 ```
-# Синхронизировать данные из MinIO
+# Синхронизировать данные из MinIO (принудительно)
 poetry run python -m src.presentation.cli --sync
 ```
 
@@ -134,6 +143,8 @@ poetry run python -m src.presentation.cli --sync
 # Анализ всех отзывов из CSV
 poetry run python -m src.presentation.cli --csv data/reviews.csv
 ```
+
+Если файл отсутствует локально, то будет выполнена попытка синхронизировать данные из MinIO
 
 **Проверить DVC статус**
 ```
@@ -170,5 +181,5 @@ MINIO_ACCESS_KEY
 MINIO_SECRET_KEY
  (default: minioadmin)
 MINIO_BUCKET
- (default: datasets
+ (default: datasets)
 ```

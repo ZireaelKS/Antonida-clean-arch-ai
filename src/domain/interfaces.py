@@ -37,6 +37,10 @@ class IDataStorage(ABC):
         """Загрузить локальный файл в облако."""
         pass
 
+    @abstractmethod
+    def file_exists(self, remote_path: str) -> bool:
+        """Проверить, существует ли файл в хранилище."""
+        pass
 
 class IReviewReader(ABC):
     """

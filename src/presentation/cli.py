@@ -18,52 +18,6 @@ from src.infrastructure.storage import S3Storage
 from src.infrastructure.csv_reader import CSVReviewReader
 from src.application.services import ReviewProcessingService, DataSyncService
 
-
-def ensure_data_synced(local_path: str, remote_path: str = None, sync_service: DataSyncService = None) -> bool:
-    """
-    Проверяет наличие файла локально и синхронизирует через DVC при необходимости.
-    """
-    local_file = Path(local_path)
-
-    # Если файл уже существует - ничего не делаем
-    if local_file.exists():
-        print(f"[Sync] Файл {local_path} уже существует локально.")
-        return True
-
-    print(f"[Sync] Файл {local_path} не найден. Загружаю из MinIO через DVC...")
-
-    # Находим соответствующий .dvc файл
-    dvc_file = local_file.with_suffix(local_file.suffix + '.dvc')
-    if not dvc_file.exists():
-        # Ищем в родительских папках
-        dvc_file = Path(local_path + '.dvc')
-
-    if not dvc_file.exists():
-        print(f"[Sync Error] DVC метафайл {dvc_file} не найден.")
-        return False
-
-    # Используем dvc pull для восстановления файла
-    try:
-        result = subprocess.run(
-            ["poetry", "run", "dvc", "pull", str(dvc_file)],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        print(f"[Sync] Данные успешно загружены из MinIO")
-
-        # Проверяем, что файл появился
-        if local_file.exists():
-            return True
-        else:
-            print(f"[Sync Error] Файл не появился после dvc pull")
-            return False
-
-    except subprocess.CalledProcessError as e:
-        print(f"[Sync Error] DVC pull failed: {e.stderr}")
-        return False
-
-
 def main():
     """
     Точка входа в приложение.
@@ -104,17 +58,14 @@ def main():
 
     # --- 3. Подготовка данных (Синхронизация) --
     # Скачиваем файл, необходимый для демонстрации (если его нет локально)
-    # Примечание: В MinIO файл должен лежать по пути 'demo/test_invoice.txt'
+    # --- Принудительная синхронизация ---
     if args.sync:
-        print("Синхронизация данных с MinIO...")
-        try:
-            sync_service.sync_dataset(
-                remote_path="reviews.csv",
-                local_path="data/reviews.csv"
-            )
+        print("Принудительная синхронизация данных с MinIO...")
+        if sync_service.sync_dataset("reviews.csv", "data/reviews.csv", force=True):
             print("Данные синхронизированы")
-        except Exception as e:
-            print(f"Ошибка синхронизации: {e}")
+        else:
+            print("Ошибка синхронизации")
+        return
 
     # --- 4. Запуск ---
     if args.csv:
@@ -130,10 +81,11 @@ def main():
             remote_file = Path(csv_path).name
 
         # Автоматически синхронизируем файл, если его нет
-        if not ensure_data_synced(csv_path, remote_file, sync_service):
+        if not sync_service.sync_dataset(remote_file, csv_path):
             print("[Error] Не удалось получить файл для анализа. Выход.")
             sys.exit(1)
 
+        # Читаем и анализируем
         reader = CSVReviewReader(csv_path)
         reviews = reader.read_all()
         service_with_reader = ReviewProcessingService(analyzer=analyzer, reader=reader)

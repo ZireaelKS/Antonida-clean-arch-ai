@@ -137,23 +137,49 @@ class DataSyncService:
         # Инверсия зависимостей: зависим от интерфейса, а не от реализации
         self.storage = storage
 
-    def sync_dataset(self, remote_path: str, local_path: str) -> None:
+    def sync_dataset(self, remote_path: str, local_path: str, force: bool = False) -> bool:
         """
-        Проверяет наличие локального файла и скачивает его при отсутствии.
-
-        Это обеспечивает идемпотентность: повторный запуск не приведет к
-        лишним скачиваниям, если данные уже на месте.
+        Синхронизирует файл, используя DVC (если есть .dvc файл) или прямое скачивание.
         """
         local_file = Path(local_path)
 
-        if not local_file.exists():
-            print(f"[Sync] Файл {local_path} не найден. Запрашиваю синхронизацию--.")
+        if local_file.exists() and not force:
+            print(f"[Sync] Файл {local_path} уже существует локально.")
+            return True
 
-            # Создаем родительские папки, если их нет (например, data/docs/)
-            # exist_ok=True позволяет не падать с ошибкой, если папка уже есть
-            local_file.parent.mkdir(parents=True, exist_ok=True)
+        # Проверяем, есть ли .dvc файл (значит, данные под DVC)
+        dvc_file = Path(local_path + '.dvc')
+        if not dvc_file.exists():
+            dvc_file = local_file.parent / (local_file.name + '.dvc')
 
-            # Скачиваем данные через абстрактное хранилище
-            self.storage.download_file(remote_path, local_path)
+        if dvc_file.exists():
+            # Используем DVC для скачивания
+            print(f"[Sync] Файл под управлением DVC. Использую dvc pull...")
+            import subprocess
+            try:
+                result = subprocess.run(
+                    ["poetry", "run", "dvc", "pull", str(dvc_file)],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                print(f"[Sync] Файл успешно восстановлен через DVC")
+                return local_file.exists()
+            except subprocess.CalledProcessError as e:
+                print(f"[Sync Error] DVC pull failed: {e.stderr}")
+                return False
         else:
-            print(f"[Sync] Файл {local_path} уже существует. Пропускаю.")
+            # Прямое скачивание через boto3
+            print(f"[Sync] Файл не под DVC. Скачиваю напрямую из MinIO...")
+            if not self.storage.file_exists(remote_path):
+                print(f"[Sync Error] Файл {remote_path} не найден в хранилище.")
+                return False
+
+            try:
+                local_file.parent.mkdir(parents=True, exist_ok=True)
+                self.storage.download_file(remote_path, local_path)
+                print(f"[Sync] Файл {local_path} успешно загружен.")
+                return True
+            except Exception as e:
+                print(f"[Sync Error] Ошибка загрузки: {e}")
+                return False
