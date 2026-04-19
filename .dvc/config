@@ -1,8 +1,13 @@
 [core]
-    remote = minio
+    remote = models_storage
 ['remote "minio"']
     url = s3://datasets
     endpointurl = http://localhost:9000
     access_key_id = minioadmin
     secret_access_key = minioadmin
     use_ssl = false
+['remote "models_storage"']
+    url = s3://models
+    endpointurl = http://localhost:9000
+    access_key_id = minioadmin
+    secret_access_key = minioadmin

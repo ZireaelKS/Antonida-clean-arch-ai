@@ -32,6 +32,8 @@ Python 3.10+
 Poetry (управление зависимостями)
 Pydantic: Описание и валидация сущностей (Entities).
 FastAPI: Веб-интерфейс API.
+ONNX Runtime: Высокопроизводительный движок для запуска моделей.
+Scikit-learn: Обучение ML-моделей.
 Docker: Запуск инфраструктуры (MinIO).
 DVC (Data Version Control): Управление версиями данных.
 Boto3: Работа с S3-хранилищем (MinIO).
@@ -97,10 +99,17 @@ git add data/docs.dvc .gitignore
 git commit -m "Add initial dataset structure
 ```
 
+##### 4. Инициализация MinIO
+```
+poetry run python scripts/init_minio.py
+```
+
+
 ##### 4. Настройка удаленного хранилища (MinIO)
 ```
 ## Добавление удаленного хранилища
 poetry run dvc remote add -d minio s3://datasets
+poetry run dvc remote add -d models_storage s3://models
 
 ## Настройка URL локального MinIO
 poetry run dvc remote modify minio endpointurl http://localhost:9000
@@ -142,6 +151,20 @@ poetry add uvicorn
 ```
 poetry add fastapi
 ```
+
+##### Установка numpy
+```
+poetry add numpy
+```
+
+##### Установка библиотек для машинного обучения
+```
+poetry add scikit-learn skl2onnx onnxruntime
+```
+
+
+
+
 
 ## Запуск проекта
 #### Запуск через CLI
@@ -186,8 +209,32 @@ poetry run uvicorn src.presentation.api:app --reload
 ```
 
 **Открыть документацию FastAPI**
-
 В браузере откройте: http://localhost:8000/docs
+
+#### Пример использования (Curl)
+Отправка документа на классификацию:
+```
+curl -X 'POST' \
+    'http:./127.0.0.1:8000/classify' \
+    -H 'Content-Type: application/json' \
+    -d '{
+    "filename": "contract_123.txt",
+    "content": "Договор аренды помещения №45 от 12.01.2024. Стороны пришли к соглашению..."
+}'
+```
+Ответ
+```
+{
+    "label": "contract",
+    "confidence": 0.92
+}
+```
+
+## Обучение модели
+```
+poetry run python scripts/train_model.py
+```
+В результате создастся файл train_model.py
 
 ## Запуск тестов
 ```

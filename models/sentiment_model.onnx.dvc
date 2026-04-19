@@ -1,5 +1,5 @@
 outs:
-- md5: 145c581d16e1a3cf1440251dd8ccc9bc
-  size: 8438
+- md5: 3361ee463250b5a953fc096723d8c53b
+  size: 3049
   hash: md5
   path: sentiment_model.onnx
