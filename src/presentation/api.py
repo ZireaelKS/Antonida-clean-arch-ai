@@ -23,7 +23,7 @@ def get_model():
     Используется lru_cache, чтобы не создавать объект модели заново на каждый запрос.
     """
     # Путь, куда скачивается модель при старте
-    model_path = "models/new_sentiment_model.onnx"
+    model_path = "models/sentiment_model.onnx"
     print(f"[Model] Загрузка модели из {model_path}...")
     return ONNXDocumentClassifier(model_path)
 
@@ -73,8 +73,8 @@ async def lifespan(app: FastAPI):
 
         print("[Startup] Проверка наличия обновлений модели в S3...")
         model_sync.sync_dataset(
-            remote_path="new_sentiment_model.onnx",
-            local_path="models/new_sentiment_model.onnx"
+            remote_path="sentiment_model.onnx",
+            local_path="models/sentiment_model.onnx"
         )
 
         # Предзагрузка модели в память, чтобы первый HTTP-запрос отработал мгновенно
