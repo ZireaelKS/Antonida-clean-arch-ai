@@ -2,28 +2,125 @@
 Clean Architecture AI - Анализатор тональности отзывов (Вариант №2)
 
 ## Описание слоев
-1. **Domain (Ядро)** - src/domain/
-entities.py: Содержит Pydantic-модели данных:
-Review(text: str, author: str) - сущность отзыва пользователя
-SentimentScore(label: str, score: float) - результат анализа тональности
-interfaces.py: Определяет абстрактный интерфейс ISentimentAnalyzer с методом analyze()
+### 1. **Domain (Ядро)** - src/domain/
+Слой домена содержит бизнес-сущности и контракты системы. Он полностью независим от инфраструктуры, API и внешних библиотек.
 
-2. **Application (Бизнес-логика)** - src/application/services.py
-ReviewProcessingService: Сценарий использования (Use Case)
-preprocess(raw_text: str) -> str - очистка текста от лишних пробелов
-process_review(raw_text: str) -> SentimentScore - основной метод обработки
-prepare_for_training(raw_texts: list) -> list - подготовка данных для обучения
+#### `entities.py`
+Определяет основные доменные сущности (Pydantic-модели):
 
-3. **Infrastructure (Инфраструктура)** - src/infrastructure/analyzers.py
-SimpleAnalyzer(ISentimentAnalyzer): Заглушка модели машинного обучения
-Логика анализа:
-если длина текста > 50 символов → "Positive"
-иначе → "Negative"
-Confidence вычисляется на основе длины текста
+- **Review**
+  - `text: str` — текст отзыва пользователя  
+  - `author: str` — автор отзыва  
 
-4. **Presentation (Представление)** - src/presentation/
-cli.py: Интерфейс командной строки
-Поддержка аргументов командной строки
+- **SentimentScore**
+  - `label: str` — предсказанный класс (Positive / Negative / etc.)
+  - `score: float` — уверенность модели (0.0–1.0)
+
+#### `interfaces.py`
+Определяет абстрактные контракты (принцип Dependency Inversion):
+
+- **ISentimentAnalyzer**
+  - `analyze(review: Review) -> SentimentScore`  
+  Интерфейс модели анализа тональности (ONNX / Mock / ML-модель)
+
+- **IDataStorage**
+  Интерфейс работы с объектным хранилищем (S3 / MinIO / локальное)
+
+- **IReviewReader**
+  Интерфейс источника данных (CSV / JSON / DB)
+  - `read_all() -> list[Review]`
+
+
+### 2. **Application (Бизнес-логика)** - src/application/services.py
+Слой сценариев использования (Use Cases). Здесь происходит оркестрация доменных объектов и вызов инфраструктуры через интерфейсы.
+
+#### **ReviewProcessingService**
+Основной сценарий обработки отзывов:
+
+- `analyze(text: str, author: str) -> SentimentScore`  
+  - очищает текст  
+  - создаёт `Review`  
+  - вызывает `ISentimentAnalyzer`  
+
+- `analyze_batch() -> list[SentimentScore]`  
+  - читает данные через `IReviewReader`  
+  - обрабатывает список отзывов  
+
+#### **DataSyncService**
+Сервис синхронизации данных (модели / датасеты):
+
+- `sync_dataset(remote_path, local_path, force=False) -> bool`
+  - загрузка файлов из S3/MinIO
+  - поддержка DVC fallback
+  - проверка локального кэша
+
+
+### 3. **Infrastructure (Инфраструктура)** - src/infrastructure/analyzers.py
+Реализация внешних зависимостей (ML, хранилище, файлы). Слой полностью заменяемый.
+
+#### `models.py`
+
+- **SimpleAnalyzer (ISentimentAnalyzer)**
+  - заглушка ML-модели
+  - rule-based логика (по длине текста)
+
+- **ONNXSentimentAnalyzer**
+  - загрузка ONNX модели
+  - inference через `onnxruntime`
+  - преобразование входных данных в тензоры
+
+
+#### `storage.py`
+
+- **S3Storage (IDataStorage)**
+  - работа с MinIO / AWS S3 через `boto3`
+  - методы:
+    - `file_exists()`
+    - `download_file()`
+    - `upload_file()`
+
+
+#### `csv_reader.py`
+
+- **CSVReviewReader (IReviewReader)**
+  - чтение CSV файлов с отзывами
+  - преобразование строк в `Review`
+  - дополнительные методы:
+    - фильтрация по автору
+    - получение статистики
+
+
+### 4. **Presentation (Представление)** - src/presentation/
+Слой взаимодействия с пользователем и внешними системами.
+
+#### `cli.py`
+CLI-интерфейс приложения:
+
+- анализ одного текста
+- batch-анализ CSV
+- синхронизация данных (`--sync`)
+
+
+#### `api.py` (FastAPI)
+
+REST API:
+
+- `GET /` — health check
+- `POST /analyze` — анализ одного отзыва
+
+Использует Dependency Injection для подключения Application слоя.
+
+
+#### `dependencies.py`
+DI-контейнер (сборка приложения):
+
+Фабрики зависимостей:
+
+- `get_model() → ONNXSentimentAnalyzer`
+- `get_review_service() → ReviewProcessingService`
+- `get_batch_service() → ReviewProcessingService + CSVReviewReader`
+- `get_sync_service() → DataSyncService + S3Storage`
+
 
 
 ## Настройка проекта
@@ -104,11 +201,15 @@ git commit -m "Add initial dataset structure
 poetry run python scripts/init_minio.py
 ```
 
+##### 5. Обучение модели
+```
+poetry run python scripts/train_model.py
+```
+В результате создастся файл train_model.py
 
-##### 4. Настройка удаленного хранилища (MinIO)
+##### 6. Настройка удаленного хранилища (MinIO)
 ```
 ## Добавление удаленного хранилища
-poetry run dvc remote add -d minio s3://datasets
 poetry run dvc remote add -d models_storage s3://models
 
 ## Настройка URL локального MinIO
@@ -126,12 +227,12 @@ poetry run dvc remote modify minio secret_access_key minioadmin
 DVC работает через API, поэтому используем порт **9000**.
 
 
-##### 5. Отправка данных в MinIO
+##### 7. Отправка данных в MinIO
 ```
 poetry run dvc push
 ```
 
-##### 6. Проверить, что данные синхронизированы
+##### 8. Проверить, что данные синхронизированы
 ```
 poetry run dvc status --cloud
 ## Должно быть: Cache and remote 'minio' are in sync.
@@ -165,7 +266,6 @@ poetry add scikit-learn skl2onnx onnxruntime
 
 
 
-
 ## Запуск проекта
 #### Запуск через CLI
 **С аргументом командной строки**
@@ -173,24 +273,11 @@ poetry add scikit-learn skl2onnx onnxruntime
 poetry run python -m src.presentation.cli "This movie is fantastic!"
 ```
 
-**С текстом по умолчанию**
-```
-poetry run python -m src.presentation.cli
-```
-
 **Проверить синхронизацию данных**
 ```
 # Синхронизировать данные из MinIO (принудительно)
 poetry run python -m src.presentation.cli --sync
 ```
-
-**Протестировать анализ CSV файла**
-```
-# Анализ всех отзывов из CSV
-poetry run python -m src.presentation.cli --csv data/reviews.csv
-```
-
-Если файл отсутствует локально, то будет выполнена попытка синхронизировать данные из MinIO
 
 **Проверить DVC статус**
 ```
@@ -215,26 +302,21 @@ poetry run uvicorn src.presentation.api:app --reload
 Отправка документа на классификацию:
 ```
 curl -X 'POST' \
-    'http:./127.0.0.1:8000/classify' \
-    -H 'Content-Type: application/json' \
-    -d '{
-    "filename": "contract_123.txt",
-    "content": "Договор аренды помещения №45 от 12.01.2024. Стороны пришли к соглашению..."
+  'http://localhost:8000/analyze' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "text": "Замечательно! Выше всех ожиданий, я рад!",
+  "author": "Иванов И.И."
 }'
 ```
 Ответ
 ```
 {
-    "label": "contract",
-    "confidence": 0.92
+  "label": "Positive",
+  "score": 0.5069935321807861
 }
 ```
-
-## Обучение модели
-```
-poetry run python scripts/train_model.py
-```
-В результате создастся файл train_model.py
 
 ## Запуск тестов
 ```

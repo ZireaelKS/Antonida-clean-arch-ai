@@ -6,6 +6,8 @@
 """
 from abc import ABC, abstractmethod
 from src.domain.entities import Review, SentimentScore
+
+
 class ISentimentAnalyzer(ABC):
     """
     Абстрактный интерфейс модели ИИ.

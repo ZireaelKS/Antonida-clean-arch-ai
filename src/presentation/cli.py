@@ -8,15 +8,9 @@
 3. Запустить сценарий использования (Use Case).
 4. Вывести результат в понятном пользователю формате.
 """
-import sys
-import os
 import argparse
-import subprocess
-from pathlib import Path
-from src.infrastructure.models import SimpleAnalyzer
-from src.infrastructure.storage import S3Storage
-from src.infrastructure.csv_reader import CSVReviewReader
-from src.application.services import ReviewProcessingService, DataSyncService
+from src.presentation.dependencies import get_sync_service, get_batch_service, get_review_service
+
 
 def main():
     """
@@ -32,29 +26,7 @@ def main():
 
     args = parser.parse_args()
 
-    # --- 0. Конфигурация (обычно берется из .env) --
-    s3_config = {
-        "endpoint_url": os.getenv("MINIO_ENDPOINT", "http://localhost:9000"),
-        "access_key": os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
-        "secret_key": os.getenv("MINIO_SECRET_KEY", "minioadmin"),
-        "bucket": os.getenv("MINIO_BUCKET", "datasets")
-    }
-    # --- 1. Инициализация инфраструктуры (Composition Root) --
-
-    # 1.1 Инициализация хранилища
-    storage = S3Storage(**s3_config)
-
-    # 1.2 Инициализация модели
-    # Здесь выбираем конкретную реализацию модели.
-    analyzer = SimpleAnalyzer()
-
-    # --- 2. Инициализация бизнес-логики (Dependency Injection) --
-    # 2.1 Сервис синхронизации данных
-    sync_service = DataSyncService(storage=storage)
-
-    # 2.2 Сервис маршрутизации документов
-    # Сервис получает готовую модель, не зная, как она устроена внутри.
-    service = ReviewProcessingService(analyzer=analyzer, reader=None)
+    sync_service = get_sync_service()
 
     # --- 3. Подготовка данных (Синхронизация) --
     # Скачиваем файл, необходимый для демонстрации (если его нет локально)
@@ -67,75 +39,31 @@ def main():
             print("Ошибка синхронизации")
         return
 
-    # --- 4. Запуск ---
+    # --- Batch режим ---
     if args.csv:
         csv_path = args.csv
 
-        print(f"\n[Batch Mode] Подготовка к анализу файла: {csv_path}")
+        print(f"\n[Batch Mode] Анализ файла: {csv_path}")
 
-        # Определяем remote_path на основе локального пути
-        # Если путь содержит 'data/reviews.csv', используем 'reviews.csv'
-        if "reviews.csv" in csv_path:
-            remote_file = "reviews.csv"
-        else:
-            remote_file = Path(csv_path).name
+        service = get_batch_service()
+        results = service.analyze_batch()
 
-        # Автоматически синхронизируем файл, если его нет
-        if not sync_service.sync_dataset(remote_file, csv_path):
-            print("[Error] Не удалось получить файл для анализа. Выход.")
-            sys.exit(1)
-
-        # Читаем и анализируем
-        reader = CSVReviewReader(csv_path)
-        reviews = reader.read_all()
-        service_with_reader = ReviewProcessingService(analyzer=analyzer, reader=reader)
-
-        # Выполняем анализ
-        print(f"\nАнализ отзывов из файла: {csv_path}")
-        results = service_with_reader.analyze_batch()
-
-        print(f"\nРезультаты анализа ({len(results)} отзывов):")
+        print(f"\nРезультаты ({len(results)}):")
         print("=" * 60)
 
-        for i, (review, result) in enumerate(zip(reviews, results), 1):
-            print(f"\n{i}. Отзыв: \"{review.text[:100]}{'...' if len(review.text) > 100 else ''}\"")
-            print(f"  Результат: {result.label} (уверенность: {result.score:.1%})")
+        for i, result in enumerate(results, 1):
+            print(f"{i}. {result.label} ({result.score:.1%})")
 
-        print(f"\n Всего обработано: {len(results)} отзывов")
         return
 
-    elif args.text:
-        # Анализ одного отзыва
-        input_text = args.text
-        print(f" Текст: \"{input_text}\"")
+    # --- Single текст ---
+    if args.text:
+        service = get_review_service()
+        result = service.analyze(args.text, "CLI")
 
-        result = service.process_review(input_text)
-        emoji = ":)" if result.label == "Positive" else ":("
+        print(result)
+        return
 
-        print(f"\n Результат:")
-        print(f"   Тональность: {emoji} {result.label}")
-        print(f"   Уверенность: {result.score:.1%}")
-
-    else:
-        parser.print_help()
-
-    # ЛАБ №1 (оставлю)
-    # #1. Инициализация инфраструктуры (Composition Root)
-    # # Здесь выбираем конкретную реализацию модели.
-    # # В будущем MockModel можно заменить на TensorFlowModel, изменив только эту строчку.
-    # analyzer = SimpleAnalyzer()
-    # # 2. Инициализация бизнес-логики (Внедрение зависимостей / Dependency Injection)
-    # # Сервис получает готовую модель, не зная, как она устроена внутри.
-    # service = ReviewProcessingService(analyzer=analyzer)
-    # # 3. Взаимодействие с пользователем
-    # # Получение данных из внешнего мира (аргументы CLI)
-    # input_text = "Hello World"
-    # if len(sys.argv) > 1:
-    #     input_text = sys.argv[1]
-    # print(f"Running inference on: '{input_text}'")
-    # # 4. Запуск сценария использования
-    # result = service.run(input_text)
-    # # 5. Вывод результата
-    # print(f"Result: {result.label} (Confidence: {result.score})")
+    parser.print_help()
 if __name__ == "__main__":
     main()
